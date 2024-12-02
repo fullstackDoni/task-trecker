@@ -1,6 +1,7 @@
 package model;
 
 public class Node {
+
     private Task task;
     private Node prev;
     private Node next;
