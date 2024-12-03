@@ -2,7 +2,6 @@ package service.managers;
 import model.Epic;
 import model.SubTask;
 import model.Task;
-
 import java.util.List;
 
 public interface TaskManager {
@@ -29,8 +28,6 @@ public interface TaskManager {
 
     void updateEpic(Epic epic);
 
-    void updateStatus(Epic epic);
-
     void updateSubtask(SubTask subtask);
 
     void removeTask(int id);
@@ -48,5 +45,7 @@ public interface TaskManager {
     List<Task> getHistory();
 
     List<SubTask> getSubtasksOfEpic(int epicId);
+
+    List<Task> getPriorityTasks();
 
 }

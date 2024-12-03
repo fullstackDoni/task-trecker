@@ -1,5 +1,4 @@
 package service.file;
-
 import exception.ManagerSaveException;
 import model.Epic;
 import model.SubTask;
@@ -7,11 +6,10 @@ import model.Task;
 import model.enums.Status;
 import model.enums.TaskType;
 import service.managers.InMemoryTaskManager;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.Writer;
+import java.io.*;
 import java.nio.file.Files;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class FileBackedTaskManager extends InMemoryTaskManager {
@@ -40,7 +38,6 @@ public class FileBackedTaskManager extends InMemoryTaskManager {
         save();
     }
 
-
     @Override
     public void updateTask(Task task) {
         super.updateTask(task);
@@ -64,7 +61,6 @@ public class FileBackedTaskManager extends InMemoryTaskManager {
         super.removeTask(id);
         save();
     }
-
 
     @Override
     public void removeEpic(int epicId) {
@@ -98,7 +94,7 @@ public class FileBackedTaskManager extends InMemoryTaskManager {
 
     private void save() {
         try (Writer writer = new FileWriter(file)) {
-            writer.write("id,type,name,status,description,epic\n");
+            writer.write("id,type,name,description,status,startTime,duration,endTime,epicId\n");
             for (Task task : getAllTasks()) {
                 writer.write(toCSV(task) + "\n");
             }
@@ -113,37 +109,45 @@ public class FileBackedTaskManager extends InMemoryTaskManager {
         }
     }
 
-
     private String toCSV(Task task) {
-        String type = task instanceof Epic ? "EPIC" : (task instanceof SubTask ? "SUBTASK" : "TASK");
-        String epicId = task instanceof SubTask ? String.valueOf(((SubTask) task).getEpicId()) : "";
-        return String.format("%d,%s,%s,%s,%s,%s",
-                task.getId(),
-                type,
-                task.getName(),
-                task.getStatus().name(),
-                task.getDescription(),
-                epicId
-        );
+            String type = task instanceof Epic ? "EPIC" : (task instanceof SubTask ? "SUBTASK" : "TASK");
+            String epicId = task instanceof SubTask ? String.valueOf(((SubTask) task).getEpicId()) : "";
+
+            return String.format("%d,%s,%s,%s,%s,%s,%s,%s,%s",
+                    task.getId(),
+                    type,
+                    task.getName(),
+                    task.getDescription(),
+                    task.getStatus(),
+                    task.getStartTime() != null ? task.getStartTime().toString() : "",
+                    task.getDuration() != null ? task.getDuration().toString() : "",
+                    task.getEndTime() != null ? task.getEndTime().toString() : "",
+                    epicId
+            );
     }
 
     private Task fromCSV(String[] fields) {
-        int id = Integer.parseInt(fields[0]);
-        TaskType type = TaskType.valueOf(fields[1].toUpperCase());
-        String name = fields[2];
-        Status status = Status.valueOf(fields[3]);
-        String description = fields[4];
-        int epicId = fields.length > 5 ? Integer.parseInt(fields[5]) : -1;
-
-        switch (type) {
-            case TASK:
-                return new Task(id, name, description, status);
-            case EPIC:
-                return new Epic(id, name, description,status);
-            case SUBTASK:
-                return new SubTask(id,name, description, status,epicId);
-            default:
-                throw new IllegalArgumentException("Неизвестный тип задачи: " + type);
+        try {
+            int id = Integer.parseInt(fields[0]);
+            TaskType type = TaskType.valueOf(fields[1].toUpperCase());
+            String name = fields[2];
+            Status status = Status.valueOf(fields[3]);
+            String description = fields[4];
+            Duration duration = fields[5].isEmpty() ? Duration.ZERO : Duration.parse(fields[5]);
+            LocalDateTime startTime = fields[6].isEmpty() ? null : LocalDateTime.parse(fields[6]);
+            switch (type) {
+                case TASK:
+                    return new Task(id, name, description,status,startTime, duration);
+                case EPIC:
+                    return new Epic(id, name, description);
+                case SUBTASK:
+                    int epicId = Integer.parseInt(fields[7]);
+                    return new SubTask(id, name, description, startTime, duration, epicId);
+                default:
+                    throw new IllegalArgumentException("Неизвестный тип задачи: " + type);
+            }
+        } catch (Exception e) {
+            throw new ManagerSaveException("Ошибка с разбором строки CSV: " + String.join(",", fields), e);
         }
     }
 
@@ -164,20 +168,27 @@ public class FileBackedTaskManager extends InMemoryTaskManager {
                     if (task.getId() > maxId) {
                         maxId = task.getId();
                     }
+
                     if (task instanceof Epic) {
                         manager.epics.put(task.getId(), (Epic) task);
                     } else if (task instanceof SubTask) {
                         manager.subtasks.put(task.getId(), (SubTask) task);
                         Epic epic = manager.epics.get(((SubTask) task).getEpicId());
-                        epic.addSubTask(task.getId());
+                        if (epic != null) {
+                            epic.addSubTask(task.getId());
+                        }
                     } else {
                         manager.tasks.put(task.getId(), task);
                     }
+
+                    if (!(task instanceof Epic)) {
+                        manager.getPriorityTasks().add(task);
+                    }
+
                 } catch (Exception e) {
                     throw new ManagerSaveException("Ошибка при разборе строки: " + line, e);
                 }
             }
-
         } catch (IOException e) {
             throw new ManagerSaveException("Ошибка при загрузке из файла: " + file.getName(), e);
         }
@@ -185,5 +196,4 @@ public class FileBackedTaskManager extends InMemoryTaskManager {
         manager.id = maxId + 1;
         return manager;
     }
-
 }
