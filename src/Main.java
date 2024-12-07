@@ -1,11 +1,10 @@
 import service.file.FileBackedTaskManager;
-
 import java.io.File;
 
 public class Main {
 
     public static void main(String[] args) {
-        File file = new File("tasks.csv");
+        File file = new File("temporary.csv");
         FileBackedTaskManager manager = new FileBackedTaskManager(file);
 
         try {
